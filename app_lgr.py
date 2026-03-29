@@ -1,16 +1,8 @@
-"""
-app pra calcular LGR - DCA3701 Projeto de SisCon
-rodar com: streamlit run app_lgr.py
-"""
-
 import numpy as np
 import matplotlib.pyplot as plt
 import streamlit as st
 
 st.set_page_config(page_title="LGR - 12 Passos", layout="wide")
-
-
-# === utils ===
 
 def formatar_complexo(c):
     r = round(c.real, 4)
@@ -101,8 +93,6 @@ def separar_jw(coefs):
 
     return montar(re), montar(im)
 
-
-# === os 12 passos ===
 
 def fazer_passo1(nG, dG, nH, dH):
     num = np.convolve(nG, nH)
@@ -323,8 +313,6 @@ def tabela_routh(den, num):
     return linhas, conds, sorted(k_crit)
 
 
-# === calculo do root locus na mao ===
-
 def ordenar_raizes(prev, curr):
     """ordena as raizes pra manter continuidade entre passos de K"""
     n = len(curr)
@@ -422,8 +410,6 @@ def plotar_lgr(num, den, zeros, polos, sigma_a, ang_ass, bk_pts, cruzamentos):
     return fig
 
 
-# === teste angulo (passo 11) ===
-
 def testar_angulo(s_teste, zeros, polos):
     ap = sum(np.degrees(np.angle(s_teste - p)) for p in polos)
     az = sum(np.degrees(np.angle(s_teste - z)) for z in zeros)
@@ -446,26 +432,23 @@ def calcular_K_ponto(s_pt, zeros, polos):
     return prod_p / prod_z if prod_z > 1e-12 else np.inf
 
 
-# =============================================
-#                INTERFACE
-# =============================================
 
-st.title("LGR - 12 Passos")
+st.title("LGR - João Igor Ramos de Lima")
 st.caption("DCA-3701 Projeto de Sistemas de Controle - UFRN")
 
-st.markdown("**G(s) = K . N_G(s) / D_G(s)**")
+st.markdown("**G(s) = K . N(G(s)) / D(G(s))**")
 col1, col2 = st.columns(2)
 with col1:
-    txt_nG = st.text_input("Numerador G(s)", value="1 0.2", help="Coefs em ordem decrescente de s")
+    txt_nG = st.text_input("Numerador G(s)", value="1 2", help="Coefs em ordem decrescente de s")
 with col2:
-    txt_dG = st.text_input("Denominador G(s)", value="1 3.5 6 4 0", help="Coefs em ordem decrescente de s")
+    txt_dG = st.text_input("Denominador G(s)", value="1 4 0", help="Coefs em ordem decrescente de s")
 
 st.markdown("**H(s) = N_H(s) / D_H(s)**")
 col3, col4 = st.columns(2)
 with col3:
-    txt_nH = st.text_input("Numerador H(s)", value="1 0", help="Coefs em ordem decrescente de s")
+    txt_nH = st.text_input("Numerador H(s)", value="1", help="Coefs em ordem decrescente de s")
 with col4:
-    txt_dH = st.text_input("Denominador H(s)", value="1", help="Coefs em ordem decrescente de s")
+    txt_dH = st.text_input("Denominador H(s)", value="1 1", help="Coefs em ordem decrescente de s")
 
 
 if st.button("Calcular LGR", type="primary"):
@@ -546,7 +529,7 @@ if st.button("Calcular LGR", type="primary"):
     # passo 9
     st.subheader("Passo 9 - Cruzamento eixo imaginario")
 
-    # tabela de routh
+    # tabela de Routh
     routh_linhas, routh_conds, k_crits = tabela_routh(den, num)
     if routh_linhas is not None:
         with st.expander("Tabela de Routh-Hurwitz"):
