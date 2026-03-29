@@ -13,7 +13,7 @@ def formatar_complexo(c):
     return f"{r} {s} {abs(i)}j"
 
 
-SUP = str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹")
+SUP = str.maketrans("0123456789", "\u2070\u00b9\u00b2\u00b3\u2074\u2075\u2076\u2077\u2078\u2079")
 
 def superscript(n):
     return str(n).translate(SUP)
@@ -366,50 +366,6 @@ def calcular_lgr(num, den, Kmax=None):
     return Ks, raizes
 
 
-def plotar_lgr(num, den, zeros, polos, sigma_a, ang_ass, bk_pts, cruzamentos):
-    """monta o grafico do LGR"""
-    Ks, todas_raizes = calcular_lgr(num, den)
-
-    # limites baseado nos polos e zeros (nao nas raizes que vao pro infinito)
-    todos = np.concatenate([polos, zeros]) if len(zeros) > 0 else polos
-    spread = max(np.ptp(todos.real), np.ptp(todos.imag), 1.0)
-    marg = max(1.0, 0.5 * spread)
-    xl = (todos.real.min() - marg, todos.real.max() + marg)
-    yl = max(abs(todos.imag).max() + marg*0.5, marg)
-
-    fig, ax = plt.subplots(figsize=(10, 7))
-
-    # plotar ramos
-    xm = (xl[1] - xl[0]) * 0.1
-    ym = yl * 0.1
-    for j in range(todas_raizes.shape[1]):
-        ramo = todas_raizes[:, j]
-        mask = ((ramo.real > xl[0] - xm) & (ramo.real < xl[1] + xm) &
-                (ramo.imag > -yl - ym) & (ramo.imag < yl + ym))
-        ax.plot(ramo[mask].real, ramo[mask].imag, 'b.', markersize=1.5, alpha=0.7)
-
-    # polos e zeros
-    ax.plot(polos.real, polos.imag, "rx", ms=10, mew=2, label="Polos", zorder=5)
-    if len(zeros) > 0:
-        ax.plot(zeros.real, zeros.imag, "go", ms=8, mew=2, fillstyle="none",
-                label="Zeros", zorder=5)
-
-    if sigma_a is not None:
-        ax.plot(sigma_a, 0, "k+", ms=10, mew=2, label=f"Centroide ({sigma_a:.2f})")
-
-    ax.set_xlim(xl)
-    ax.set_ylim(-yl, yl)
-    ax.axhline(0, color='k', lw=0.5, alpha=0.3)
-    ax.axvline(0, color='k', lw=0.5, alpha=0.3)
-    ax.grid(True, alpha=0.3)
-    ax.set_xlabel("Real")
-    ax.set_ylabel("Imaginario")
-    ax.set_title("Lugar Geometrico das Raizes")
-    ax.legend(fontsize=9)
-    fig.tight_layout()
-    return fig
-
-
 def testar_angulo(s_teste, zeros, polos):
     ap = sum(np.degrees(np.angle(s_teste - p)) for p in polos)
     az = sum(np.degrees(np.angle(s_teste - z)) for z in zeros)
@@ -432,8 +388,115 @@ def calcular_K_ponto(s_pt, zeros, polos):
     return prod_p / prod_z if prod_z > 1e-12 else np.inf
 
 
+def mostrar_fatorado(raizes, var="s"):
+    """mostra polinomio na forma fatorada, agrupando raizes repetidas"""
+    if len(raizes) == 0:
+        return "1"
+    # monta texto de cada fator individual
+    fatores_txt = []
+    for r in raizes:
+        if abs(r.imag) < 1e-8:
+            rv = round(r.real, 4)
+            if abs(rv) < 1e-8:
+                fatores_txt.append(var)
+            elif rv > 0:
+                fatores_txt.append(f"({var} - {rv:g})")
+            else:
+                fatores_txt.append(f"({var} + {abs(rv):g})")
+        else:
+            fatores_txt.append(f"({var} - ({formatar_complexo(r)}))")
+    # conta repeticoes mantendo ordem de aparicao
+    vistos = []
+    contagem = {}
+    for f in fatores_txt:
+        if f not in contagem:
+            contagem[f] = 0
+            vistos.append(f)
+        contagem[f] += 1
+    # monta resultado com expoente quando necessario
+    partes = []
+    for f in vistos:
+        n = contagem[f]
+        if n == 1:
+            partes.append(f)
+        else:
+            partes.append(f"{f}{superscript(n)}")
+    return "".join(partes)
 
-st.title("LGR - João Igor Ramos de Lima")
+
+def limites_grafico(polos, zeros, extra_real=None):
+    """calcula limites x,y para graficos de polos/zeros"""
+    todos = np.concatenate([polos, zeros]) if len(zeros) > 0 else polos
+    spread = max(np.ptp(todos.real), np.ptp(todos.imag), 1.0)
+    marg = max(1.0, 0.5 * spread)
+    x_pts = list(todos.real)
+    if extra_real:
+        x_pts.extend(extra_real)
+    xl = (min(x_pts) - marg, max(x_pts) + marg)
+    yl = max(abs(todos.imag).max() + marg * 0.5, marg)
+    return xl, yl, marg
+
+
+def desenhar_polos_zeros(ax, polos, zeros):
+    """desenha polos e zeros no grafico"""
+    ax.plot(polos.real, polos.imag, "rx", ms=10, mew=2, label="Polos", zorder=5)
+    if len(zeros) > 0:
+        ax.plot(zeros.real, zeros.imag, "go", ms=8, mew=2, fillstyle="none",
+                label="Zeros", zorder=5)
+
+
+def finalizar_grafico(ax, xl, yl, titulo=""):
+    """configura eixos, grid, titulo"""
+    ax.set_xlim(xl)
+    ax.set_ylim(-yl, yl)
+    ax.axhline(0, color='k', lw=0.5, alpha=0.3)
+    ax.axvline(0, color='k', lw=0.5, alpha=0.3)
+    ax.grid(True, alpha=0.3)
+    ax.set_xlabel("Real")
+    ax.set_ylabel("Imaginario")
+    ax.set_title(titulo)
+    ax.legend(fontsize=9)
+
+
+def desenhar_segmentos(ax, segs, xl):
+    """desenha segmentos do eixo real que pertencem ao LGR"""
+    for i, (a, b) in enumerate(segs):
+        a_plot = max(a, xl[0] - 5) if np.isfinite(a) else xl[0] - 5
+        b_plot = min(b, xl[1] + 5) if np.isfinite(b) else xl[1] + 5
+        lbl = "Segmento LGR" if i == 0 else ""
+        ax.plot([a_plot, b_plot], [0, 0], 'b-', linewidth=4, alpha=0.6,
+                solid_capstyle='round', label=lbl)
+
+
+def desenhar_assintotas(ax, sigma_a, angs, xl, yl):
+    """desenha linhas de assintotas a partir do centroide"""
+    line_len = max(abs(xl[0]), abs(xl[1]), yl) * 2
+    for i, ang_deg in enumerate(angs):
+        ang_rad = np.radians(ang_deg)
+        dx = line_len * np.cos(ang_rad)
+        dy = line_len * np.sin(ang_rad)
+        lbl = "Assintotas" if i == 0 else ""
+        ax.plot([sigma_a, sigma_a + dx], [0, dy], '--', color='darkorange',
+                linewidth=1.5, alpha=0.7, label=lbl)
+
+
+def desenhar_lgr_fundo(ax, todas_raizes, xl, yl):
+    """desenha o LGR numerico como fundo cinza"""
+    xm = (xl[1] - xl[0]) * 0.1
+    ym = yl * 0.1
+    for j in range(todas_raizes.shape[1]):
+        ramo = todas_raizes[:, j]
+        mask = ((ramo.real > xl[0] - xm) & (ramo.real < xl[1] + xm) &
+                (ramo.imag > -yl - ym) & (ramo.imag < yl + ym))
+        ax.plot(ramo[mask].real, ramo[mask].imag, '.', color='gray',
+                markersize=1.5, alpha=0.35)
+
+
+# ============================================================
+# Interface
+# ============================================================
+
+st.title("LGR - Jo\u00e3o Igor Ramos de Lima")
 st.caption("DCA-3701 Projeto de Sistemas de Controle - UFRN")
 
 st.markdown("**G(s) = K . N(G(s)) / D(G(s))**")
@@ -450,50 +513,112 @@ with col3:
 with col4:
     txt_dH = st.text_input("Denominador H(s)", value="1 1", help="Coefs em ordem decrescente de s")
 
+st.markdown("**Ponto de teste (Passos 11/12):**")
+ct1, ct2 = st.columns(2)
+with ct1:
+    sr = st.number_input("Parte real", value=0.0, format="%.4f", key="sr")
+with ct2:
+    si = st.number_input("Parte imaginaria", value=0.0, format="%.4f", key="si")
 
 if st.button("Calcular LGR", type="primary"):
-    nG = parse_coefs(txt_nG)
-    dG = parse_coefs(txt_dG)
-    nH = parse_coefs(txt_nH)
-    dH = parse_coefs(txt_dH)
+    st.session_state['calcular_lgr'] = True
 
-    if any(x is None for x in [nG, dG, nH, dH]):
-        st.error("Confere os coeficientes ai, algo ta errado")
-        st.stop()
+if not st.session_state.get('calcular_lgr', False):
+    st.stop()
 
-    # passo 1
-    num, den = fazer_passo1(nG, dG, nH, dH)
+nG = parse_coefs(txt_nG)
+dG = parse_coefs(txt_dG)
+nH = parse_coefs(txt_nH)
+dH = parse_coefs(txt_dH)
 
-    st.markdown("---")
-    st.subheader("Passo 1 - Equacao Caracteristica")
-    st.text(f"1 + K[{mostrar_poly(num)}] / [{mostrar_poly(den)}] = 0")
-    st.text(f"P(s) = {mostrar_poly(den)} + K({mostrar_poly(num)})")
+if any(x is None for x in [nG, dG, nH, dH]):
+    st.error("Confere os coeficientes ai, algo ta errado")
+    st.stop()
 
-    # passo 2
-    zeros = np.roots(num)
-    polos = np.roots(den)
+# ============================================================
+# Computacoes (toda logica inalterada)
+# ============================================================
 
-    st.subheader("Passo 2 - Polos e Zeros de MA")
+num, den = fazer_passo1(nG, dG, nH, dH)
+zeros = np.roots(num)
+polos = np.roots(den)
+segs = achar_segmentos_eixo_real(zeros, polos)
+ls = max(len(polos), len(zeros))
+sigma_a, angs = calcular_assintotas(zeros, polos)
+bk_pts, bk_info = achar_breakaway(num, den, polos, zeros)
+routh_linhas, routh_conds, k_crits = tabela_routh(den, num)
+cruzs, info_jw = cruzamento_jw(den, num)
+ang_textos = angulos_partida_chegada(zeros, polos)
+Ks_lgr, todas_raizes = calcular_lgr(num, den)
+
+xl, yl, marg = limites_grafico(polos, zeros,
+    [sigma_a] if sigma_a is not None else None)
+
+s_test = complex(sr, si)
+ang, ang_n, pert, Kp = testar_angulo(s_test, zeros, polos)
+K_ponto = calcular_K_ponto(s_test, zeros, polos)
+
+st.markdown("---")
+
+# ============================================================
+# Passo 1
+# ============================================================
+with st.expander("Passo 1 - Equacao Caracteristica", expanded=True):
+    st.text(f"G(s) = K . ({mostrar_poly(nG)}) / ({mostrar_poly(dG)})")
+    st.text(f"H(s) = ({mostrar_poly(nH)}) / ({mostrar_poly(dH)})")
+    st.text("")
+    st.text(f"1 + G(s)H(s) = 1 + K . [{mostrar_poly(num)}] / [{mostrar_poly(den)}]")
+    st.text(f"             = 1 + K . P(s) = 0")
+    st.text("")
+    st.text(f"Eq. Caracteristica: {mostrar_poly(den)} + K({mostrar_poly(num)}) = 0")
+
+# ============================================================
+# Passo 2
+# ============================================================
+with st.expander("Passo 2 - P(s) na forma fatorada"):
+    num_fat = mostrar_fatorado(zeros)
+    den_fat = mostrar_fatorado(polos)
+    st.text(f"1 + G(s)H(s) = 1 + K . {num_fat} / [{den_fat}] = 0")
+
+# ============================================================
+# Passo 3
+# ============================================================
+with st.expander("Passo 3 - Polos e Zeros no plano s"):
+    fig3, ax3 = plt.subplots(figsize=(10, 6))
+    desenhar_polos_zeros(ax3, polos, zeros)
+    for i, p in enumerate(polos):
+        ax3.annotate(f"  p{i+1}", (p.real, p.imag), fontsize=9, color='red')
+    for i, z in enumerate(zeros):
+        ax3.annotate(f"  z{i+1}", (z.real, z.imag), fontsize=9, color='green')
+    finalizar_grafico(ax3, xl, yl, "Polos e Zeros no plano s")
+    fig3.tight_layout()
+    st.pyplot(fig3)
+
     c1, c2 = st.columns(2)
     with c1:
         st.markdown(f"**Polos (n_p = {len(polos)})**")
-        for p in polos:
-            st.text(f"  p = {formatar_complexo(p)}")
+        for i, p in enumerate(polos):
+            st.text(f"  p{i+1} = {formatar_complexo(p)}")
     with c2:
         st.markdown(f"**Zeros (n_z = {len(zeros)})**")
         if len(zeros) > 0:
-            for z in zeros:
-                st.text(f"  z = {formatar_complexo(z)}")
+            for i, z in enumerate(zeros):
+                st.text(f"  z{i+1} = {formatar_complexo(z)}")
         else:
             st.text("  nenhum")
 
-    # passo 3
-    st.subheader("Passo 3 - Polos e Zeros no plano s")
-    st.text("(marcados no grafico abaixo)")
+# ============================================================
+# Passo 4
+# ============================================================
+with st.expander("Passo 4 - Segmentos no eixo real"):
+    fig4, ax4 = plt.subplots(figsize=(10, 6))
+    desenhar_polos_zeros(ax4, polos, zeros)
+    desenhar_segmentos(ax4, segs, xl)
+    finalizar_grafico(ax4, xl, yl, "Segmentos do eixo real pertencentes ao LGR")
+    fig4.tight_layout()
+    st.pyplot(fig4)
 
-    # passo 4
-    st.subheader("Passo 4 - Segmentos no eixo real")
-    segs = achar_segmentos_eixo_real(zeros, polos)
+    st.markdown("**Regra:** segmentos a esquerda de um numero impar de polos e zeros reais")
     if segs:
         for a, b in segs:
             ea = f"{a:.4f}" if np.isfinite(a) else "-inf"
@@ -502,81 +627,331 @@ if st.button("Calcular LGR", type="primary"):
     else:
         st.text("  Nenhum segmento no eixo real")
 
-    # passo 5
-    ls = max(len(polos), len(zeros))
-    st.subheader("Passo 5 - Lugares separados")
-    st.text(f"  LS = max({len(polos)}, {len(zeros)}) = {ls}")
+# ============================================================
+# Passo 5
+# ============================================================
+with st.expander("Passo 5 - Lugares separados"):
+    st.text(f"  n_p = {len(polos)},  n_z = {len(zeros)}")
+    st.text(f"  LS = max(n_p, n_z) = max({len(polos)}, {len(zeros)}) = {ls}")
 
-    # passo 6
-    st.subheader("Passo 6 - Simetria")
+# ============================================================
+# Passo 6
+# ============================================================
+with st.expander("Passo 6 - Simetria"):
     st.text("  O LGR e simetrico em relacao ao eixo real")
+    st.text("  (raizes complexas sempre ocorrem em pares conjugados)")
 
-    # passo 7
-    st.subheader("Passo 7 - Assintotas")
-    sigma_a, angs = calcular_assintotas(zeros, polos)
+# ============================================================
+# Passo 7
+# ============================================================
+with st.expander("Passo 7 - Assintotas"):
     if sigma_a is not None:
-        st.text(f"  Centroide: sigma_a = {sigma_a:.4f}")
-        st.text(f"  Angulos: {', '.join(f'{a:.1f}\u00b0' for a in angs)}")
+        na = len(polos) - len(zeros)
+        st.markdown(f"**Numero de assintotas:** n_a = n_p - n_z = {len(polos)} - {len(zeros)} = {na}")
+
+        soma_p = np.sum(polos).real
+        soma_z = np.sum(zeros).real if len(zeros) > 0 else 0.0
+        st.markdown("**Centroide (ponto de encontro das assintotas):**")
+        st.text(f"  sigma_a = (soma polos - soma zeros) / (n_p - n_z)")
+        st.text(f"  sigma_a = ({soma_p:.4f} - {soma_z:.4f}) / {na}")
+        st.text(f"  sigma_a = {sigma_a:.4f}")
+
+        st.markdown("**Angulos das assintotas:**")
+        st.text(f"  phi_a = (2q + 1) . 180 / {na}")
+        for q, a in enumerate(angs):
+            st.text(f"  q = {q}: phi_a = {a:.1f}\u00b0")
+
+        fig7, ax7 = plt.subplots(figsize=(10, 6))
+        desenhar_polos_zeros(ax7, polos, zeros)
+        desenhar_segmentos(ax7, segs, xl)
+        desenhar_assintotas(ax7, sigma_a, angs, xl, yl)
+        ax7.plot(sigma_a, 0, "k+", ms=12, mew=2, label=f"Centroide ({sigma_a:.2f})")
+        finalizar_grafico(ax7, xl, yl, "LGR - Assintotas")
+        fig7.tight_layout()
+        st.pyplot(fig7)
     else:
         st.text("  n_p = n_z, sem assintotas")
 
-    # passo 8
-    st.subheader("Passo 8 - Breakaway / Break-in")
-    bk_pts, bk_info = achar_breakaway(num, den, polos, zeros)
+# ============================================================
+# Passo 8
+# ============================================================
+with st.expander("Passo 8 - Breakaway / Break-in"):
+    st.markdown("**Pontos de saida/entrada (descolamento):**")
+    st.text("  K = -D(s)/N(s),  derivar e igualar a zero")
+    st.text("  N'(s)D(s) - N(s)D'(s) = 0")
+    st.text("")
+    st.markdown("**Raizes encontradas:**")
     for txt in bk_info:
         st.text(f"  {txt}")
 
-    # passo 9
-    st.subheader("Passo 9 - Cruzamento eixo imaginario")
+    fig8, ax8 = plt.subplots(figsize=(10, 6))
+    desenhar_polos_zeros(ax8, polos, zeros)
+    desenhar_segmentos(ax8, segs, xl)
+    if sigma_a is not None:
+        desenhar_assintotas(ax8, sigma_a, angs, xl, yl)
+    bk_validos = [(s_bk, k_bk) for s_bk, k_bk in bk_pts if isinstance(s_bk, (int, float))]
+    if bk_validos:
+        bk_x = [s_bk for s_bk, _ in bk_validos]
+        ax8.plot(bk_x, [0]*len(bk_x), 'md', ms=10, mew=2,
+                label="Breakaway/Break-in", zorder=6)
+        for s_bk, k_bk in bk_validos:
+            ax8.annotate(f"  s={s_bk:.2f}, K={k_bk:.2f}", (s_bk, 0),
+                        fontsize=8, color='purple')
+    finalizar_grafico(ax8, xl, yl, "LGR - Pontos de Descolamento")
+    fig8.tight_layout()
+    st.pyplot(fig8)
 
+# ============================================================
+# Passo 9
+# ============================================================
+with st.expander("Passo 9 - Cruzamento eixo imaginario"):
     # tabela de Routh
-    routh_linhas, routh_conds, k_crits = tabela_routh(den, num)
     if routh_linhas is not None:
-        with st.expander("Tabela de Routh-Hurwitz"):
-            for l in routh_linhas:
-                st.text(l)
-            st.markdown("**Condicoes de estabilidade:**")
-            for c in routh_conds:
-                st.text(f"  {c}")
-            if k_crits:
-                st.text(f"  K critico(s): {', '.join(f'{k:.4f}' for k in k_crits)}")
+        st.markdown("**Tabela de Routh-Hurwitz:**")
+        st.code("\n".join(routh_linhas), language=None)
+        st.markdown("**Condicoes de estabilidade:**")
+        for c in routh_conds:
+            st.text(f"  {c}")
+        if k_crits:
+            st.text(f"  K critico(s): {', '.join(f'{k:.4f}' for k in k_crits)}")
 
-    cruzs, info_jw = cruzamento_jw(den, num)
-    st.text(f"  Eq. eliminando K: {mostrar_poly(info_jw['cross'], 'w')} = 0")
+    st.markdown("**Cruzamento com eixo imaginario:**")
+    st.text(f"  Substituindo s = jw e eliminando K:")
+    st.text(f"  {mostrar_poly(info_jw['cross'], 'w')} = 0")
     if cruzs:
         for Kc, wc in cruzs:
-            st.text(f"  K = {Kc:.4f},  s = +/-{wc:.4f}j")
+            st.text(f"  K = {Kc:.4f},  s = +/- {wc:.4f}j")
     else:
         st.text("  Nao cruza o eixo jw (K > 0)")
 
-    # passo 10
-    st.subheader("Passo 10 - Angulos de partida/chegada")
-    ang_textos = angulos_partida_chegada(zeros, polos)
-    if ang_textos:
+    fig9, ax9 = plt.subplots(figsize=(10, 6))
+    desenhar_lgr_fundo(ax9, todas_raizes, xl, yl)
+    desenhar_polos_zeros(ax9, polos, zeros)
+    if cruzs:
+        for Kc, wc in cruzs:
+            ax9.plot(0, wc, 's', ms=10, color='cyan', markeredgecolor='navy',
+                    mew=2, zorder=6, label=f"jw = {wc:.2f}j (K={Kc:.2f})")
+            ax9.plot(0, -wc, 's', ms=10, color='cyan', markeredgecolor='navy',
+                    mew=2, zorder=6)
+    finalizar_grafico(ax9, xl, yl, "LGR - Cruzamento com eixo imaginario")
+    fig9.tight_layout()
+    st.pyplot(fig9)
+
+# ============================================================
+# Passo 10
+# ============================================================
+with st.expander("Passo 10 - Angulos de partida/chegada"):
+    polos_cx = [p for p in polos if p.imag > 1e-8]
+    zeros_cx = [z for z in zeros if z.imag > 1e-8]
+
+    if polos_cx or zeros_cx:
+        # calculos detalhados de partida
+        angulos_partida = {}
+        for pk in polos_cx:
+            st.markdown(f"**Polo {formatar_complexo(pk)} - angulo de partida:**")
+            ang_polos_list = []
+            for pj in polos:
+                if abs(pj - pk) > 1e-10:
+                    a_pj = np.degrees(np.angle(pk - pj))
+                    ang_polos_list.append(a_pj)
+                    st.text(f"  angulo do polo {formatar_complexo(pj)}: {a_pj:.2f}\u00b0")
+            ang_zeros_list = []
+            for zj in zeros:
+                a_zj = np.degrees(np.angle(pk - zj))
+                ang_zeros_list.append(a_zj)
+                st.text(f"  angulo do zero {formatar_complexo(zj)}: {a_zj:.2f}\u00b0")
+            soma_ap = sum(ang_polos_list)
+            soma_az = sum(ang_zeros_list)
+            theta = 180.0 - soma_ap + soma_az
+            theta = ((theta + 180) % 360) - 180
+            st.text(f"  partida = 180 - {soma_ap:.2f} + {soma_az:.2f} = {theta % 360:.2f}\u00b0")
+            angulos_partida[pk] = theta
+
+        # calculos detalhados de chegada
+        angulos_chegada = {}
+        for zk in zeros_cx:
+            st.markdown(f"**Zero {formatar_complexo(zk)} - angulo de chegada:**")
+            ang_zeros_list = []
+            for zj in zeros:
+                if abs(zj - zk) > 1e-10:
+                    a_zj = np.degrees(np.angle(zk - zj))
+                    ang_zeros_list.append(a_zj)
+                    st.text(f"  angulo do zero {formatar_complexo(zj)}: {a_zj:.2f}\u00b0")
+            ang_polos_list = []
+            for pj in polos:
+                a_pj = np.degrees(np.angle(zk - pj))
+                ang_polos_list.append(a_pj)
+                st.text(f"  angulo do polo {formatar_complexo(pj)}: {a_pj:.2f}\u00b0")
+            soma_az = sum(ang_zeros_list)
+            soma_ap = sum(ang_polos_list)
+            theta = 180.0 - soma_az + soma_ap
+            theta = ((theta + 180) % 360) - 180
+            st.text(f"  chegada = 180 - {soma_az:.2f} + {soma_ap:.2f} = {theta % 360:.2f}\u00b0")
+            angulos_chegada[zk] = theta
+
+        st.markdown("**Resumo:**")
         for t in ang_textos:
             st.text(f"  {t}")
+
+        # grafico
+        fig10, ax10 = plt.subplots(figsize=(10, 7))
+        desenhar_lgr_fundo(ax10, todas_raizes, xl, yl)
+        desenhar_polos_zeros(ax10, polos, zeros)
+
+        todos_arr = np.concatenate([polos, zeros]) if len(zeros) > 0 else polos
+        spread = max(np.ptp(todos_arr.real), np.ptp(todos_arr.imag), 1.0)
+        arrow_len = spread * 0.3
+
+        for pk, theta in angulos_partida.items():
+            rad = np.radians(theta)
+            dx = arrow_len * np.cos(rad)
+            dy = arrow_len * np.sin(rad)
+            ax10.annotate('', xy=(pk.real + dx, pk.imag + dy),
+                         xytext=(pk.real, pk.imag),
+                         arrowprops=dict(arrowstyle='->', color='darkred', lw=2))
+            ax10.text(pk.real + dx*1.3, pk.imag + dy*1.3,
+                     f'{theta%360:.1f}\u00b0', color='darkred', fontsize=9, ha='center')
+            # conjugado
+            rad_c = np.radians(-theta)
+            dx_c = arrow_len * np.cos(rad_c)
+            dy_c = arrow_len * np.sin(rad_c)
+            ax10.annotate('', xy=(pk.real + dx_c, -pk.imag + dy_c),
+                         xytext=(pk.real, -pk.imag),
+                         arrowprops=dict(arrowstyle='->', color='darkred', lw=2))
+
+        for zk, theta in angulos_chegada.items():
+            rad = np.radians(theta)
+            dx = arrow_len * np.cos(rad)
+            dy = arrow_len * np.sin(rad)
+            ax10.annotate('', xy=(zk.real + dx, zk.imag + dy),
+                         xytext=(zk.real, zk.imag),
+                         arrowprops=dict(arrowstyle='->', color='darkgreen', lw=2))
+            ax10.text(zk.real + dx*1.3, zk.imag + dy*1.3,
+                     f'{theta%360:.1f}\u00b0', color='darkgreen', fontsize=9, ha='center')
+
+        finalizar_grafico(ax10, (xl[0] - marg*0.5, xl[1] + marg*0.5),
+                         yl + marg*0.5,
+                         "LGR - Angulos de Partida/Chegada")
+        fig10.tight_layout()
+        st.pyplot(fig10)
     else:
-        st.text("  Sem polos/zeros complexos")
+        st.text("  Sem polos/zeros complexos, passo nao se aplica")
 
-    # passo 11 e 12 - interativo
-    st.subheader("Passo 11/12 - Testar ponto e calcular K")
-    cc1, cc2 = st.columns(2)
-    with cc1:
-        sr = st.number_input("Parte real", value=0.0, format="%.4f", key="sr")
-    with cc2:
-        si = st.number_input("Parte imaginaria", value=0.0, format="%.4f", key="si")
+# ============================================================
+# Passo 11
+# ============================================================
+with st.expander("Passo 11 - Criterio de Angulo"):
+    st.markdown(f"**Ponto de teste:** s = {formatar_complexo(s_test)}")
 
-    s_test = complex(sr, si)
-    ang, ang_n, pert, Kp = testar_angulo(s_test, zeros, polos)
-    K_ponto = calcular_K_ponto(s_test, zeros, polos)
+    st.markdown("**Angulos dos polos:**")
+    theta_poles = []
+    for i, p in enumerate(polos):
+        ang_p = np.degrees(np.angle(s_test - p))
+        theta_poles.append(ang_p)
+        st.text(f"  polo p{i+1} = {formatar_complexo(p)}: theta = {ang_p:.2f}\u00b0")
+    soma_theta = sum(theta_poles)
+    st.text(f"  Soma angulos polos = {soma_theta:.2f}\u00b0")
+
+    if len(zeros) > 0:
+        st.markdown("**Angulos dos zeros:**")
+        phi_zeros = []
+        for i, z in enumerate(zeros):
+            ang_z = np.degrees(np.angle(s_test - z))
+            phi_zeros.append(ang_z)
+            st.text(f"  zero z{i+1} = {formatar_complexo(z)}: phi = {ang_z:.2f}\u00b0")
+        soma_phi = sum(phi_zeros)
+        st.text(f"  Soma angulos zeros = {soma_phi:.2f}\u00b0")
+    else:
+        soma_phi = 0.0
+        st.text("  Nenhum zero (soma phi = 0)")
+
+    st.markdown("**Resultado:**")
+    st.text(f"  Angulo = soma_polos - soma_zeros = {soma_theta:.2f} - {soma_phi:.2f} = {soma_theta - soma_phi:.2f}\u00b0")
+    st.text(f"  Angulo normalizado: {ang_n % 360:.2f}\u00b0")
 
     if pert:
-        st.success(f"Ponto PERTENCE ao LGR (angulo = {ang_n % 360:.2f}\u00b0). K = {Kp:.6f}")
+        st.success(f"Ponto PERTENCE ao LGR (angulo = {ang_n % 360:.2f}\u00b0)")
     else:
-        st.warning(f"Ponto NAO pertence (angulo = {ang_n % 360:.2f}\u00b0). K nesse ponto = {K_ponto:.6f}")
+        st.warning(f"Ponto NAO pertence ao LGR (angulo = {ang_n % 360:.2f}\u00b0)")
 
     # grafico
-    st.markdown("---")
-    st.subheader("Grafico do LGR")
-    fig = plotar_lgr(num, den, zeros, polos, sigma_a, angs, bk_pts, cruzs)
-    st.pyplot(fig)
+    fig11, ax11 = plt.subplots(figsize=(10, 6))
+    desenhar_polos_zeros(ax11, polos, zeros)
+    cor = 'limegreen' if pert else 'red'
+    marcador = '*' if pert else 'X'
+    lbl = f"s = {formatar_complexo(s_test)} ({'pertence' if pert else 'nao pertence'})"
+    ax11.plot(s_test.real, s_test.imag, marcador, ms=14, color=cor,
+             markeredgecolor='black', label=lbl, zorder=6)
+    for p in polos:
+        ax11.plot([p.real, s_test.real], [p.imag, s_test.imag], ':', color='red', alpha=0.4)
+    for z in zeros:
+        ax11.plot([z.real, s_test.real], [z.imag, s_test.imag], ':', color='green', alpha=0.4)
+    all_x = list(polos.real) + [s_test.real]
+    if len(zeros) > 0:
+        all_x.extend(list(zeros.real))
+    all_y = list(abs(polos.imag)) + [abs(s_test.imag)]
+    if len(zeros) > 0:
+        all_y.extend(list(abs(zeros.imag)))
+    x_lim11 = (min(all_x) - 2, max(all_x) + 2)
+    y_lim11 = max(all_y) + 2
+    finalizar_grafico(ax11, x_lim11, y_lim11, "Criterio de Angulo")
+    fig11.tight_layout()
+    st.pyplot(fig11)
+
+# ============================================================
+# Passo 12
+# ============================================================
+with st.expander("Passo 12 - Calculo de K"):
+    st.markdown(f"**Ponto:** s = {formatar_complexo(s_test)}")
+
+    st.markdown("**Distancias dos polos:**")
+    prod_p = 1.0
+    for i, p in enumerate(polos):
+        d = abs(s_test - p)
+        prod_p *= d
+        st.text(f"  |s - p{i+1}| = {d:.4f}")
+    st.text(f"  Produto distancias polos = {prod_p:.4f}")
+
+    if len(zeros) > 0:
+        st.markdown("**Distancias dos zeros:**")
+        prod_z = 1.0
+        for i, z in enumerate(zeros):
+            d = abs(s_test - z)
+            prod_z *= d
+            st.text(f"  |s - z{i+1}| = {d:.4f}")
+        st.text(f"  Produto distancias zeros = {prod_z:.4f}")
+    else:
+        prod_z = 1.0
+        st.text("  Nenhum zero (produto = 1)")
+
+    if prod_z > 1e-12:
+        K_calc = prod_p / prod_z
+        st.text(f"  K = {prod_p:.4f} / {prod_z:.4f} = {K_calc:.4f}")
+        if pert:
+            st.success(f"Ponto pertence ao LGR. K = {K_calc:.6f}")
+        else:
+            st.warning(f"Ponto nao pertence ao LGR. K = {K_calc:.6f} (referencia apenas)")
+    else:
+        st.text("  Nao e possivel calcular K (ponto coincide com zero)")
+
+# ============================================================
+# Grafico Completo
+# ============================================================
+st.markdown("---")
+st.subheader("Grafico Completo do LGR")
+
+fig_final, ax_final = plt.subplots(figsize=(10, 7))
+xm = (xl[1] - xl[0]) * 0.1
+ym = yl * 0.1
+for j in range(todas_raizes.shape[1]):
+    ramo = todas_raizes[:, j]
+    mask = ((ramo.real > xl[0] - xm) & (ramo.real < xl[1] + xm) &
+            (ramo.imag > -yl - ym) & (ramo.imag < yl + ym))
+    ax_final.plot(ramo[mask].real, ramo[mask].imag, 'b.', markersize=1.5, alpha=0.7)
+
+desenhar_polos_zeros(ax_final, polos, zeros)
+if sigma_a is not None:
+    ax_final.plot(sigma_a, 0, "k+", ms=10, mew=2, label=f"Centroide ({sigma_a:.2f})")
+finalizar_grafico(ax_final, xl, yl, "Lugar Geometrico das Raizes")
+fig_final.tight_layout()
+st.pyplot(fig_final)
